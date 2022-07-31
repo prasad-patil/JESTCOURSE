@@ -1,7 +1,7 @@
 import { Authorizer } from "../../app/Authorization/Authorizer"
 import { SessionTokenDBAccess } from "../../app/Authorization/SessionTokenDBAccess";
 import { UserCredentialsDbAccess } from "../../app/Authorization/UserCredentialsDbAccess";
-import { Account, SessionToken } from "../../app/Models/ServerModels";
+import { Account, SessionToken, TokenState } from "../../app/Models/ServerModels";
 
 jest.mock('../../app/Authorization/SessionTokenDBAccess');
 jest.mock('../../app/Authorization/UserCredentialsDbAccess');
@@ -10,7 +10,8 @@ describe('authorizer test, suite', ()=>{
     let authorizer: Authorizer;
     
     const sessionTokenDBAccessMock = {
-        storeSessionToken: jest.fn()
+        storeSessionToken: jest.fn(),
+        getToken: jest.fn()
     };
     const userCredentialsDBAccessMock = {
         getUserCredential: jest.fn()
@@ -75,6 +76,62 @@ describe('authorizer test, suite', ()=>{
         const actualSessionToken = await authorizer.generateToken(someAccountMock);
 
         expect(actualSessionToken).toEqual('error');
+    })
+
+    describe('validate token tests', ()=>{
+        test('should return accessrights if the token is valid', async()=>{
+            const mockTokenId = 'someValidToken';
+            const expectedSessionToken: SessionToken = {
+                userName: 'someuser',
+                accessRights: [1, 2, 3],
+                valid: true,
+                tokenId: 'someValidToken',
+                expirationTime: new Date(Date.now() + 1000 * 60 * 60)
+            }
+            sessionTokenDBAccessMock.getToken.mockReturnValueOnce(expectedSessionToken);
+
+            // invoke
+            const token = await authorizer.validateToken(mockTokenId);
+
+            expect(token).toEqual({
+                accessRights: [1, 2, 3],
+                state: TokenState.VALID
+            })
+        });
+
+        test('should return accessRights empty if the token is expired', async()=>{
+            const mockTokenId = 'someValidToken';
+            const expectedSessionToken: SessionToken = {
+                userName: 'someuser',
+                accessRights: [1, 2, 3],
+                valid: true,
+                tokenId: 'someValidToken',
+                expirationTime: new Date(1000 * 60 * 60)
+            }
+            sessionTokenDBAccessMock.getToken.mockReturnValueOnce(expectedSessionToken);
+
+            // invoke
+            const token = await authorizer.validateToken(mockTokenId);
+
+            expect(token).toEqual({
+                accessRights: [],
+                state: TokenState.EXPIRED
+            })
+        });
+
+        test('should return accessRights empty if the token is expired', async()=>{
+            const mockTokenId = 'someValidToken';
+            const expectedSessionToken: SessionToken | null = null
+            sessionTokenDBAccessMock.getToken.mockReturnValueOnce(expectedSessionToken);
+
+            // invoke
+            const token = await authorizer.validateToken(mockTokenId);
+
+            expect(token).toEqual({
+                accessRights: [],
+                state: TokenState.INVALID
+            })
+        })
     })
 
 })
